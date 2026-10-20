@@ -1,0 +1,26 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+
+# SQLite (including WAL mode sidecars)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Prisma generated client
+src/generated/
+
+# Logs / coverage / build caches
+*.log
+npm-debug.log*
+coverage
+*.tsbuildinfo
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea

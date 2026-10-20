@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum CartStatus {
+  OPEN
+  CHECKED_OUT
+}
+
+enum CouponStatus {
+  AVAILABLE
+  REDEEMED
+}
+
+// Catalog item available for purchase; price is stored in integer cents.
+// CHECK constraints (e.g. inventory >= 0, priceCents >= 0) live in the migration SQL because Prisma schema cannot express them.
+model Product {
+  id          String     @id @default(cuid())
+  name        String
+  priceCents  Int
+  inventory   Int
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+}
+
+// Shopping session that accumulates line items before checkout.
+model Cart {
+  id        String     @id @default(cuid())
+  status    CartStatus @default(OPEN)
+  items     CartItem[]
+  order     Order?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// One product line inside a cart; quantity is per product per cart.
+model CartItem {
+  id        String  @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  // A cart may contain each product at most once (quantity is updated in place).
+  @@unique([cartId, productId])
+}
+
+// Immutable checkout record produced from a cart; money fields are integer cents.
+model Order {
+  id               String      @id @default(cuid())
+  // One cart can be checked out at most once.
+  cartId           String      @unique
+  // Prevents duplicate order creation from the same client retry.
+  idempotencyKey   String      @unique
+  // A coupon may be applied to at most one order.
+  couponId         String?     @unique
+  subtotalCents    Int
+  discountPercent  Int         @default(0)
+  discountCents    Int         @default(0)
+  totalCents       Int
+  items            OrderItem[]
+  createdAt        DateTime    @default(now())
+  cart             Cart        @relation(fields: [cartId], references: [id])
+  coupon           Coupon?     @relation(fields: [couponId], references: [id])
+}
+
+// Frozen snapshot of a purchased line; keeps historical prices even if Product changes.
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  productId      String
+  productName    String
+  unitPriceCents Int
+  quantity       Int
+  lineTotalCents Int
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product @relation(fields: [productId], references: [id])
+}
+
+// Milestone discount code (e.g. every N orders); redeemed by at most one order.
+model Coupon {
+  id              String       @id @default(cuid())
+  // Human-facing redemption code must be unique.
+  code            String       @unique
+  discountPercent Int
+  // Each milestone number maps to exactly one coupon.
+  milestone       Int          @unique
+  status          CouponStatus @default(AVAILABLE)
+  redeemedAt      DateTime?
+  order           Order?
+  createdAt       DateTime     @default(now())
+}

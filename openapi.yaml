@@ -1,0 +1,752 @@
+openapi: 3.1.0
+info:
+  title: Uniblox Storefront API
+  version: 1.0.0
+  description: |
+    Storefront API with products, carts, atomic checkout, idempotent orders,
+    milestone coupons, and an admin report. Money fields are integer paise (INR).
+servers:
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: Products
+  - name: Carts
+  - name: Checkout
+  - name: Orders
+  - name: Admin
+    description: Administrative operations — no auth implemented; would be protected in production.
+paths:
+  /health:
+    get:
+      tags: [Products]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /products:
+    get:
+      tags: [Products]
+      summary: List products
+      operationId: listProducts
+      responses:
+        "200":
+          description: Product catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [currency, products]
+                properties:
+                  currency:
+                    type: string
+                    enum: [INR]
+                  products:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Product"
+              example:
+                currency: INR
+                products:
+                  - id: prod_mouse
+                    name: Wireless Mouse
+                    priceCents: 129900
+                    inventory: 100
+
+  /products/{productId}:
+    get:
+      tags: [Products]
+      summary: Get product by id
+      operationId: getProduct
+      parameters:
+        - $ref: "#/components/parameters/productId"
+      responses:
+        "200":
+          description: Product found
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    required: [currency]
+                    properties:
+                      currency:
+                        type: string
+                        enum: [INR]
+                  - $ref: "#/components/schemas/Product"
+              example:
+                currency: INR
+                id: prod_keyboard
+                name: Mechanical Keyboard
+                priceCents: 349900
+                inventory: 50
+        "404":
+          description: "`PRODUCT_NOT_FOUND`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /carts:
+    post:
+      tags: [Carts]
+      summary: Create an empty cart
+      operationId: createCart
+      responses:
+        "201":
+          description: Cart created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartView"
+              example:
+                currency: INR
+                id: cart_abc123
+                status: OPEN
+                items: []
+                itemCount: 0
+                subtotalCents: 0
+
+  /carts/{cartId}:
+    get:
+      tags: [Carts]
+      summary: Get cart
+      operationId: getCart
+      parameters:
+        - $ref: "#/components/parameters/cartId"
+      responses:
+        "200":
+          description: Cart view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartView"
+        "404":
+          description: "`CART_NOT_FOUND`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /carts/{cartId}/items:
+    post:
+      tags: [Carts]
+      summary: Add item (increments quantity if product already in cart)
+      operationId: addCartItem
+      parameters:
+        - $ref: "#/components/parameters/cartId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, quantity]
+              additionalProperties: false
+              properties:
+                productId:
+                  type: string
+                  minLength: 1
+                  example: prod_mouse
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  example: 2
+      responses:
+        "200":
+          description: Updated cart view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartView"
+        "400":
+          description: "`VALIDATION_ERROR` or `INVALID_JSON`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: "`CART_NOT_FOUND` or `PRODUCT_NOT_FOUND`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: "`CART_NOT_OPEN` or `INSUFFICIENT_INVENTORY`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /carts/{cartId}/items/{productId}:
+    put:
+      tags: [Carts]
+      summary: Set absolute line quantity
+      operationId: setCartItemQuantity
+      parameters:
+        - $ref: "#/components/parameters/cartId"
+        - $ref: "#/components/parameters/productId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              additionalProperties: false
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  example: 5
+      responses:
+        "200":
+          description: Updated cart view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartView"
+        "400":
+          description: "`VALIDATION_ERROR` or `INVALID_JSON`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: "`CART_NOT_FOUND`, `CART_ITEM_NOT_FOUND`, or `PRODUCT_NOT_FOUND`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: "`CART_NOT_OPEN` or `INSUFFICIENT_INVENTORY`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Carts]
+      summary: Remove line from cart
+      operationId: removeCartItem
+      parameters:
+        - $ref: "#/components/parameters/cartId"
+        - $ref: "#/components/parameters/productId"
+      responses:
+        "200":
+          description: Updated cart view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartView"
+        "404":
+          description: "`CART_NOT_FOUND` or `CART_ITEM_NOT_FOUND`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: "`CART_NOT_OPEN`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /carts/{cartId}/checkout:
+    post:
+      tags: [Checkout]
+      summary: Checkout cart into an order
+      description: |
+        Requires `Idempotency-Key` (8–128 characters).
+
+        - **201** — new order created
+        - **200** with response header `Idempotent-Replayed: true` — same key + same cart + same coupon replay
+      operationId: checkoutCart
+      parameters:
+        - $ref: "#/components/parameters/cartId"
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+          example: checkout-key-00123456
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                couponCode:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                  description: Trimmed and uppercased by the server
+                  example: SAVE10-ABCD1234
+            examples:
+              empty:
+                summary: No coupon
+                value: {}
+              withCoupon:
+                summary: With coupon
+                value:
+                  couponCode: SAVE10-ABCD1234
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+              example:
+                currency: INR
+                id: order_abc
+                cartId: cart_abc123
+                createdAt: "2026-10-20T12:00:00.000Z"
+                items:
+                  - productId: prod_mouse
+                    productName: Wireless Mouse
+                    unitPriceCents: 129900
+                    quantity: 2
+                    lineTotalCents: 259800
+                subtotalCents: 259800
+                discountPercent: 0
+                discountCents: 0
+                couponCode: null
+                totalCents: 259800
+        "200":
+          description: "Idempotent replay of an existing order (Idempotent-Replayed: true)"
+          headers:
+            Idempotent-Replayed:
+              description: Present and set to `true` on replay
+              schema:
+                type: string
+                enum: ["true"]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "400":
+          description: "`IDEMPOTENCY_KEY_REQUIRED`, `VALIDATION_ERROR`, or `INVALID_JSON`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: "`CART_NOT_FOUND`, `PRODUCT_NOT_FOUND`, or `COUPON_NOT_FOUND`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: "`CART_ALREADY_CHECKED_OUT`, `INSUFFICIENT_INVENTORY`, or `COUPON_ALREADY_REDEEMED`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: "`CART_EMPTY` or `IDEMPOTENCY_KEY_MISMATCH`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Get order by id
+      operationId: getOrder
+      parameters:
+        - $ref: "#/components/parameters/orderId"
+      responses:
+        "200":
+          description: Order snapshot view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "404":
+          description: "`ORDER_NOT_FOUND`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/coupons:
+    post:
+      tags: [Admin]
+      summary: Generate next milestone coupon
+      operationId: generateCoupon
+      responses:
+        "201":
+          description: Coupon created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [coupon]
+                properties:
+                  coupon:
+                    $ref: "#/components/schemas/Coupon"
+              example:
+                coupon:
+                  id: coupon_abc
+                  code: SAVE10-HDTDHJFB
+                  discountPercent: 10
+                  milestone: 1
+                  status: AVAILABLE
+                  createdAt: "2026-10-20T12:00:00.000Z"
+        "409":
+          description: "`NO_ELIGIBLE_MILESTONE`, `MILESTONE_ALREADY_REWARDED`, or `CONFLICT`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      tags: [Admin]
+      summary: List coupons by milestone
+      operationId: listCoupons
+      responses:
+        "200":
+          description: Coupons ordered by milestone
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [coupons]
+                properties:
+                  coupons:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Coupon"
+
+  /admin/report:
+    get:
+      tags: [Admin]
+      summary: Revenue and inventory report (read-only)
+      operationId: getReport
+      responses:
+        "200":
+          description: Consistent snapshot report
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    required: [currency, generatedAt]
+                    properties:
+                      currency:
+                        type: string
+                        enum: [INR]
+                      generatedAt:
+                        type: string
+                        format: date-time
+                  - $ref: "#/components/schemas/Report"
+
+components:
+  parameters:
+    productId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: prod_mouse
+    cartId:
+      name: cartId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: cart_abc123
+    orderId:
+      name: orderId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: order_abc
+
+  schemas:
+    MoneyCents:
+      type: integer
+      description: Amount in paise (INR minor units)
+      example: 129900
+
+    Product:
+      type: object
+      required: [id, name, priceCents, inventory]
+      properties:
+        id:
+          type: string
+          example: prod_mouse
+        name:
+          type: string
+          example: Wireless Mouse
+        priceCents:
+          $ref: "#/components/schemas/MoneyCents"
+        inventory:
+          type: integer
+          example: 100
+
+    CartItemView:
+      type: object
+      required:
+        - productId
+        - name
+        - unitPriceCents
+        - quantity
+        - lineTotalCents
+        - availableInventory
+        - isAvailable
+      properties:
+        productId:
+          type: string
+          example: prod_mouse
+        name:
+          type: string
+          example: Wireless Mouse
+        unitPriceCents:
+          $ref: "#/components/schemas/MoneyCents"
+        quantity:
+          type: integer
+          example: 2
+        lineTotalCents:
+          $ref: "#/components/schemas/MoneyCents"
+        availableInventory:
+          type: integer
+          example: 100
+        isAvailable:
+          type: boolean
+          example: true
+
+    CartView:
+      type: object
+      required: [currency, id, status, items, itemCount, subtotalCents]
+      properties:
+        currency:
+          type: string
+          enum: [INR]
+        id:
+          type: string
+        status:
+          type: string
+          enum: [OPEN, CHECKED_OUT]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CartItemView"
+        itemCount:
+          type: integer
+          description: Sum of line quantities
+          example: 2
+        subtotalCents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    OrderItemView:
+      type: object
+      required:
+        - productId
+        - productName
+        - unitPriceCents
+        - quantity
+        - lineTotalCents
+      properties:
+        productId:
+          type: string
+          example: prod_keyboard
+        productName:
+          type: string
+          example: Mechanical Keyboard
+        unitPriceCents:
+          $ref: "#/components/schemas/MoneyCents"
+        quantity:
+          type: integer
+          example: 1
+        lineTotalCents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    OrderView:
+      type: object
+      required:
+        - currency
+        - id
+        - cartId
+        - createdAt
+        - items
+        - subtotalCents
+        - discountPercent
+        - discountCents
+        - couponCode
+        - totalCents
+      properties:
+        currency:
+          type: string
+          enum: [INR]
+        id:
+          type: string
+        cartId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItemView"
+        subtotalCents:
+          $ref: "#/components/schemas/MoneyCents"
+        discountPercent:
+          type: integer
+          example: 10
+        discountCents:
+          $ref: "#/components/schemas/MoneyCents"
+        couponCode:
+          type: string
+          nullable: true
+          example: SAVE10-ABCD1234
+        totalCents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    Coupon:
+      type: object
+      required: [id, code, discountPercent, milestone, status, createdAt]
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+          example: SAVE10-HDTDHJFB
+        discountPercent:
+          type: integer
+          example: 10
+        milestone:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [AVAILABLE, REDEEMED]
+        createdAt:
+          type: string
+          format: date-time
+
+    Report:
+      type: object
+      required:
+        - products
+        - grossRevenueCents
+        - totalDiscountCents
+        - netRevenueCents
+        - ordersPlaced
+        - coupons
+        - milestones
+      properties:
+        products:
+          type: array
+          items:
+            type: object
+            required:
+              - productId
+              - productName
+              - quantityPurchased
+              - grossRevenueCents
+            properties:
+              productId:
+                type: string
+                example: prod_mouse
+              productName:
+                type: string
+              quantityPurchased:
+                type: integer
+              grossRevenueCents:
+                $ref: "#/components/schemas/MoneyCents"
+        grossRevenueCents:
+          $ref: "#/components/schemas/MoneyCents"
+        totalDiscountCents:
+          $ref: "#/components/schemas/MoneyCents"
+        netRevenueCents:
+          $ref: "#/components/schemas/MoneyCents"
+        ordersPlaced:
+          type: integer
+        coupons:
+          type: object
+          required: [generated, available, redeemed]
+          properties:
+            generated:
+              type: integer
+            available:
+              type: integer
+            redeemed:
+              type: integer
+        milestones:
+          type: object
+          required:
+            - everyNOrders
+            - discountPercent
+            - eligible
+            - rewarded
+            - nextMilestoneAt
+          properties:
+            everyNOrders:
+              type: integer
+              example: 5
+            discountPercent:
+              type: integer
+              example: 10
+            eligible:
+              type: integer
+            rewarded:
+              type: integer
+            nextMilestoneAt:
+              type: integer
+              example: 5
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - INVALID_JSON
+                - IDEMPOTENCY_KEY_REQUIRED
+                - ROUTE_NOT_FOUND
+                - PRODUCT_NOT_FOUND
+                - CART_NOT_FOUND
+                - CART_ITEM_NOT_FOUND
+                - ORDER_NOT_FOUND
+                - COUPON_NOT_FOUND
+                - CONFLICT
+                - CART_NOT_OPEN
+                - CART_ALREADY_CHECKED_OUT
+                - INSUFFICIENT_INVENTORY
+                - COUPON_ALREADY_REDEEMED
+                - NO_ELIGIBLE_MILESTONE
+                - MILESTONE_ALREADY_REWARDED
+                - CART_EMPTY
+                - IDEMPOTENCY_KEY_MISMATCH
+                - INTERNAL_ERROR
+            message:
+              type: string
+            details:
+              description: Optional structured details (may be omitted or null)
+              nullable: true
