@@ -6,8 +6,8 @@ info:
     Storefront API with products, carts, atomic checkout, idempotent orders,
     milestone coupons, and an admin report. Money fields are integer paise (INR).
 servers:
-  - url: http://localhost:3000
-    description: Local development
+  - url: /
+    description: Same origin as these docs
 tags:
   - name: Products
   - name: Carts
@@ -485,7 +485,6 @@ components:
     MoneyCents:
       type: integer
       description: Amount in paise (INR minor units)
-      example: 129900
 
     Product:
       type: object
@@ -498,7 +497,9 @@ components:
           type: string
           example: Wireless Mouse
         priceCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 129900
         inventory:
           type: integer
           example: 100
@@ -521,12 +522,16 @@ components:
           type: string
           example: Wireless Mouse
         unitPriceCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 129900
         quantity:
           type: integer
           example: 2
         lineTotalCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 259800
         availableInventory:
           type: integer
           example: 100
@@ -537,6 +542,20 @@ components:
     CartView:
       type: object
       required: [currency, id, status, items, itemCount, subtotalCents]
+      example:
+        currency: INR
+        id: cart_abc123
+        status: OPEN
+        items:
+          - productId: prod_mouse
+            name: Wireless Mouse
+            unitPriceCents: 129900
+            quantity: 2
+            lineTotalCents: 259800
+            availableInventory: 100
+            isAvailable: true
+        itemCount: 2
+        subtotalCents: 259800
       properties:
         currency:
           type: string
@@ -555,7 +574,9 @@ components:
           description: Sum of line quantities
           example: 2
         subtotalCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 259800
 
     OrderItemView:
       type: object
@@ -573,12 +594,16 @@ components:
           type: string
           example: Mechanical Keyboard
         unitPriceCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 349900
         quantity:
           type: integer
           example: 1
         lineTotalCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 349900
 
     OrderView:
       type: object
@@ -593,6 +618,22 @@ components:
         - discountCents
         - couponCode
         - totalCents
+      example:
+        currency: INR
+        id: order_abc
+        cartId: cart_abc123
+        createdAt: "2026-10-20T12:00:00.000Z"
+        items:
+          - productId: prod_keyboard
+            productName: Mechanical Keyboard
+            unitPriceCents: 349900
+            quantity: 1
+            lineTotalCents: 349900
+        subtotalCents: 349900
+        discountPercent: 10
+        discountCents: 34990
+        couponCode: SAVE10-ABCD1234
+        totalCents: 314910
       properties:
         currency:
           type: string
@@ -609,18 +650,24 @@ components:
           items:
             $ref: "#/components/schemas/OrderItemView"
         subtotalCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 349900
         discountPercent:
           type: integer
           example: 10
         discountCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 34990
         couponCode:
           type: string
           nullable: true
           example: SAVE10-ABCD1234
         totalCents:
-          $ref: "#/components/schemas/MoneyCents"
+          allOf:
+            - $ref: "#/components/schemas/MoneyCents"
+          example: 314910
 
     Coupon:
       type: object
@@ -670,10 +717,14 @@ components:
                 example: prod_mouse
               productName:
                 type: string
+                example: Wireless Mouse
               quantityPurchased:
                 type: integer
+                example: 2
               grossRevenueCents:
-                $ref: "#/components/schemas/MoneyCents"
+                allOf:
+                  - $ref: "#/components/schemas/MoneyCents"
+                example: 259800
         grossRevenueCents:
           $ref: "#/components/schemas/MoneyCents"
         totalDiscountCents:

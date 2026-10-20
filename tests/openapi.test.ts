@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { describe, expect, it } from "vitest";
+import { SEED_PRODUCTS } from "../prisma/seed.js";
 import { app } from "../src/app.js";
 import { openapiDocument } from "../src/openapi.js";
 import { adminRouter } from "../src/routes/admin.routes.js";
@@ -191,5 +192,68 @@ describe("openapi", () => {
     const fromSpec = new Set(errorSchema);
 
     expect([...fromSpec].sort()).toEqual([...fromSource].sort());
+  });
+
+  it("examples with productId + unitPriceCents match seed data", () => {
+    const byId = new Map(SEED_PRODUCTS.map((product) => [product.id, product]));
+    const mismatches: string[] = [];
+
+    function visit(value: unknown, pathKey: string) {
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => visit(item, `${pathKey}[${index}]`));
+        return;
+      }
+
+      if (value === null || typeof value !== "object") {
+        return;
+      }
+
+      const record = value as Record<string, unknown>;
+      if (
+        typeof record.productId === "string" &&
+        typeof record.unitPriceCents === "number"
+      ) {
+        const seed = byId.get(record.productId);
+        if (!seed) {
+          mismatches.push(`${pathKey}: unknown productId ${record.productId}`);
+        } else {
+          if (record.unitPriceCents !== seed.priceCents) {
+            mismatches.push(
+              `${pathKey}: unitPriceCents ${record.unitPriceCents} != seed ${seed.priceCents}`,
+            );
+          }
+          if (
+            typeof record.productName === "string" &&
+            record.productName !== seed.name
+          ) {
+            mismatches.push(
+              `${pathKey}: productName "${record.productName}" != seed "${seed.name}"`,
+            );
+          }
+          if (typeof record.name === "string" && record.name !== seed.name) {
+            mismatches.push(
+              `${pathKey}: name "${record.name}" != seed "${seed.name}"`,
+            );
+          }
+        }
+      }
+
+      for (const [key, child] of Object.entries(record)) {
+        visit(child, `${pathKey}.${key}`);
+      }
+    }
+
+    visit(openapiDocument, "$");
+    expect(mismatches).toEqual([]);
+  });
+
+  it("servers use same-origin relative URL", () => {
+    const servers = openapiDocument.servers as Array<{ url: string }>;
+    expect(servers).toEqual(
+      expect.arrayContaining([expect.objectContaining({ url: "/" })]),
+    );
+    for (const server of servers) {
+      expect(server.url).not.toMatch(/^https?:\/\//);
+    }
   });
 });
