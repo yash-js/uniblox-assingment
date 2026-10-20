@@ -195,7 +195,9 @@ describe("openapi", () => {
   });
 
   it("examples with productId + unitPriceCents match seed data", () => {
-    const byId = new Map(SEED_PRODUCTS.map((product) => [product.id, product]));
+    const byId = new Map<string, (typeof SEED_PRODUCTS)[number]>(
+      SEED_PRODUCTS.map((product) => [product.id, product]),
+    );
     const mismatches: string[] = [];
 
     function visit(value: unknown, pathKey: string) {
@@ -247,7 +249,7 @@ describe("openapi", () => {
     expect(mismatches).toEqual([]);
   });
 
-  it("servers use same-origin relative URL", () => {
+  it("servers use same-origin relative URL in the YAML", () => {
     const servers = openapiDocument.servers as Array<{ url: string }>;
     expect(servers).toEqual(
       expect.arrayContaining([expect.objectContaining({ url: "/" })]),
@@ -255,5 +257,33 @@ describe("openapi", () => {
     for (const server of servers) {
       expect(server.url).not.toMatch(/^https?:\/\//);
     }
+  });
+
+  it("GET /openapi.json rewrites servers to the request origin", async () => {
+    const request = (await import("supertest")).default;
+    const response = await request(app)
+      .get("/openapi.json")
+      .set("Host", "uniblox.yashpurani.com")
+      .set("X-Forwarded-Proto", "https");
+
+    expect(response.status).toBe(200);
+    expect(response.body.servers).toEqual([
+      {
+        url: "https://uniblox.yashpurani.com",
+        description: "Same origin as these docs",
+      },
+    ]);
+  });
+
+  it("GET /docs/ and GET /openapi.json return Cache-Control: no-store", async () => {
+    const request = (await import("supertest")).default;
+
+    const docs = await request(app).get("/docs/");
+    expect(docs.status).toBe(200);
+    expect(docs.headers["cache-control"]).toBe("no-store");
+
+    const spec = await request(app).get("/openapi.json");
+    expect(spec.status).toBe(200);
+    expect(spec.headers["cache-control"]).toBe("no-store");
   });
 });

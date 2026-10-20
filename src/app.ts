@@ -7,7 +7,7 @@ import swaggerUi from "swagger-ui-express";
 import { ZodError } from "zod";
 import { AppError, badRequest, conflict, notFound } from "./errors.js";
 import { Prisma } from "./generated/prisma/client.js";
-import { openapiDocument } from "./openapi.js";
+import { openApiDocumentForRequest } from "./openapi.js";
 import { adminRouter } from "./routes/admin.routes.js";
 import { cartsRouter } from "./routes/carts.routes.js";
 import { checkoutRouter } from "./routes/checkout.routes.js";
@@ -16,16 +16,36 @@ import { productsRouter } from "./routes/products.routes.js";
 
 export const app = express();
 
+// Honor X-Forwarded-* when behind nginx/Cloudflare (needed for correct OpenAPI server URL).
+app.set("trust proxy", 1);
+
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.get("/openapi.json", (_req, res) => {
-  res.json(openapiDocument);
+// Prevent Cloudflare/edge from caching docs assets (esp. swagger-ui-init.js) or the spec.
+app.use(["/docs", "/openapi.json"], (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
 });
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(openapiDocument));
+
+app.get("/openapi.json", (req, res) => {
+  // Spec YAML is loaded once at startup; servers are adjusted per request origin.
+  res.json(openApiDocumentForRequest(req));
+});
+
+// Do not embed the spec in swagger-ui-init.js — fetch /openapi.json at runtime.
+app.use(
+  "/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(null, {
+    swaggerOptions: {
+      url: "/openapi.json",
+    },
+  }),
+);
 
 app.use("/products", productsRouter);
 app.use("/carts", cartsRouter);
