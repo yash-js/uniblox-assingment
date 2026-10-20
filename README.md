@@ -4,6 +4,9 @@ A small Node.js + TypeScript + Express + Prisma (SQLite) storefront: products, c
 
 **TIME_SPENT: __ hours**
 
+**Live demo (optional):** https://uniblox.yashpurani.com — Swagger UI at `/docs`.
+Hosted on a personal home server, so it may occasionally be offline; the local setup below is the primary way to run the service.
+
 **API docs:** interactive Swagger UI at [http://localhost:3000/docs](http://localhost:3000/docs) (OpenAPI source: [openapi.yaml](./openapi.yaml), also served as [http://localhost:3000/openapi.json](http://localhost:3000/openapi.json)).
 
 See also [DECISIONS.md](./DECISIONS.md).
